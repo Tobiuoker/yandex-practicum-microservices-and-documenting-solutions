@@ -51,7 +51,7 @@ API Gateway - единая публичная точка входа и пров�
 - Нельзя посмотреть историю изменения какого-либо датчика (будет сложно построить красивые дэшборды с детализацией)
 
 
-### 5. Визуализация контекста системы — диаграмма С4
+### 5. Визуализация контекста системы - диаграмма С4
 
 Добавьте сюда диаграмму контекста в модели C4.
 
@@ -131,7 +131,7 @@ AsyncAPI используется для асинхронного взаимод
 | `device.commands` | Device Registry Service | Device Connection Service | Команда на доставку устройству |
 | `device.command_status` | Device Connection Service | Device Registry Service | Статус доставки или выполнения команды |
 
-AsyncAPI документация находится в [`тут`](schemas/async_api.yaml).
+AsyncAPI документация находится [`тут`](schemas/async_api.yaml).
 
 
 ---
@@ -169,8 +169,8 @@ curl http://localhost:8080/health
 
 Было добавлено два микросервиса
 
-1. [Device Service](apps/device-service) — хранит синхронизированные устройства, соответствующие legacy sensors монолита.
-2. [Telemetry Service](apps/telemetry-service) — хранит историю telemetry, которую монолит отправляет при чтении или обновлении температуры.
+1. [Device Service](apps/device-service) - хранит синхронизированные устройства, соответствующие legacy sensors монолита.
+2. [Telemetry Service](apps/telemetry-service) - хранит историю telemetry, которую монолит отправляет при чтении или обновлении температуры.
 
 ## Device Service
 
@@ -238,15 +238,13 @@ Device Service использует отдельную БД `devices`
 | `GET /api/v1/sensors/{id}/microservices-summary` | Возвращает sensor из монолита + device + latest telemetry |
 
 
-## Postman-сценарий проверки задания 6
-
-[Коллекция](apps/smarthome-api.postman_collection.json).
+[Обновленная коллекция postman](apps/smarthome-api.postman_collection.json).
 
 Можно проверить так:
-1. `Create Sensor`;
-2. `Get Sensor by ID` — создаёт telemetry через temperature-api
-3. `Update Sensor Value` — дополнительно пишет telemetry
-4. `Get Sensor Device` — монолит читает device-service
-5. `Get Sensor Telemetry History` — монолит читает telemetry-service
-6. `Get Sensor Latest Telemetry` — монолит читает latest telemetry
-7. `Get Sensor Microservices Summary` — монолит показывает данные из всех источников одним ответом
+1. `Create Sensor`
+2. `Get Sensor by ID` - создаёт telemetry через temperature-api
+3. `Update Sensor Value` - дополнительно пишет telemetry
+4. `Get Sensor Device` - монолит читает device-service
+5. `Get Sensor Telemetry History` - монолит читает telemetry-service
+6. `Get Sensor Latest Telemetry` - монолит читает latest telemetry
+7. `Get Sensor Microservices Summary` - монолит показывает данные из всех источников одним ответом
