@@ -1,0 +1,221 @@
+asyncapi: 3.1.0
+info:
+  title: Teply Dom Internal Events
+  version: 1.0.0
+  description: Доменные события между сервисами
+defaultContentType: application/json
+
+servers:
+  internalKafka:
+    host: kafka:9092
+    protocol: kafka
+    description: Kafka broker
+
+channels:
+  deviceTelemetry:
+    address: device.telemetry
+    description: Нормализованная телеметрия от датчиков после обработки MQTT сообщения
+    messages:
+      TelemetryReceived:
+        $ref: '#/components/messages/TelemetryReceived'
+  deviceState:
+    address: device.state
+    description: Изменение текущего состояния датчика
+    messages:
+      DeviceStateChanged:
+        $ref: '#/components/messages/DeviceStateChanged'
+  deviceCommands:
+    address: device.commands
+    description: Команда, созданная и провалидированная в Device Registry Service для доставки датчику
+    messages:
+      CommandRequested:
+        $ref: '#/components/messages/CommandRequested'
+  deviceCommandStatus:
+    address: device.command_status
+    description: Статус доставки или выполнения команды датчиком
+    messages:
+      DeviceCommandStatusChanged:
+        $ref: '#/components/messages/DeviceCommandStatusChanged'
+
+operations:
+  publishTelemetryReceived:
+    action: send
+    channel:
+      $ref: '#/channels/deviceTelemetry'
+    summary: Device Connection Service публикует показания датчика
+    messages:
+      - $ref: '#/channels/deviceTelemetry/messages/TelemetryReceived'
+  consumeTelemetryReceived:
+    action: receive
+    channel:
+      $ref: '#/channels/deviceTelemetry'
+    summary: Telemetry Service сохраняет метрики, Scenarios Service проверяет сценарии по метрикам
+    messages:
+      - $ref: '#/channels/deviceTelemetry/messages/TelemetryReceived'
+  publishDeviceStateChanged:
+    action: send
+    channel:
+      $ref: '#/channels/deviceState'
+    summary: Device Connection Service публикует состояние, полученное от MQTT датчика
+    messages:
+      - $ref: '#/channels/deviceState/messages/DeviceStateChanged'
+  consumeDeviceStateChanged:
+    action: receive
+    channel:
+      $ref: '#/channels/deviceState'
+    summary: Device Registry Service обновляет состояние устройства, Scenarios Service проверяет сценарии по состоянию
+    messages:
+      - $ref: '#/channels/deviceState/messages/DeviceStateChanged'
+  publishCommandRequested:
+    action: send
+    channel:
+      $ref: '#/channels/deviceCommands'
+    summary: Device Registry Service публикует команду после REST запроса на создание команды
+    messages:
+      - $ref: '#/channels/deviceCommands/messages/CommandRequested'
+  consumeCommandRequested:
+    action: receive
+    channel:
+      $ref: '#/channels/deviceCommands'
+    summary: Device Connection Service читает команду и доставляет её датчику через MQTT
+    messages:
+      - $ref: '#/channels/deviceCommands/messages/CommandRequested'
+  publishDeviceCommandStatusChanged:
+    action: send
+    channel:
+      $ref: '#/channels/deviceCommandStatus'
+    summary: Device Connection Service публикует результат доставки или выполнения команды
+    messages:
+      - $ref: '#/channels/deviceCommandStatus/messages/DeviceCommandStatusChanged'
+  consumeDeviceCommandStatusChanged:
+    action: receive
+    channel:
+      $ref: '#/channels/deviceCommandStatus'
+    summary: Device Registry Service обновляет статус команды
+    messages:
+      - $ref: '#/channels/deviceCommandStatus/messages/DeviceCommandStatusChanged'
+
+components:
+  messages:
+    TelemetryReceived:
+      name: TelemetryReceived
+      title: Новое показание датчика
+      contentType: application/json
+      payload:
+        type: object
+        required: [event_id, occurred_at, house_id, device_id, metric, value]
+        properties:
+          event_id: { type: string }
+          occurred_at: { type: string, format: date-time }
+          house_id: { type: string }
+          device_id: { type: string }
+          metric: { type: string }
+          value: { type: number }
+          unit: { type: string }
+          quality: { type: string }
+      examples:
+        - name: temperatureTelemetry
+          payload:
+            event_id: evt-telemetry-1
+            occurred_at: '2026-01-01T00:00:00Z'
+            house_id: house-1
+            device_id: temp-sensor-1
+            metric: temperature
+            value: 21.5
+            unit: celsius
+            quality: ok
+    DeviceStateChanged:
+      name: DeviceStateChanged
+      title: Изменение состояния устройства
+      contentType: application/json
+      payload:
+        type: object
+        required: [event_id, occurred_at, house_id, device_id, state]
+        properties:
+          event_id: { type: string, examples: [evt-state-1] }
+          occurred_at: { type: string, format: date-time, examples: ['2026-01-01T00:00:05Z'] }
+          house_id: { type: string, examples: [house-1] }
+          device_id: { type: string, examples: [thermostat-1] }
+          state:
+            type: object
+            additionalProperties: true
+            examples:
+              - power: on
+                target_temperature: 22
+          version: { type: integer, examples: [12] }
+      examples:
+        - name: thermostatStateChanged
+          payload:
+            event_id: evt-state-1
+            occurred_at: '2026-01-01T00:00:05Z'
+            house_id: house-1
+            device_id: thermostat-1
+            state:
+              power: on
+              target_temperature: 22
+            version: 12
+    CommandRequested:
+      name: CommandRequested
+      title: Команда для доставки устройству
+      contentType: application/json
+      payload:
+        type: object
+        required: [event_id, command_id, house_id, device_id, capability, command, idempotency_key]
+        properties:
+          event_id: { type: string }
+          command_id: { type: string }
+          house_id: { type: string }
+          device_id: { type: string }
+          capability: { type: string }
+          command: { type: string }
+          payload:
+            type: object
+            additionalProperties: true
+            examples:
+              - target_temperature: 22
+          idempotency_key: { type: string }
+          correlation_id: { type: string }
+      examples:
+        - name: setTargetTemperature
+          payload:
+            event_id: evt-command-1
+            command_id: command-1
+            house_id: house-1
+            device_id: thermostat-1
+            capability: thermostat
+            command: set_target_temperature
+            payload:
+              target_temperature: 22
+            idempotency_key: unique-command-key
+            correlation_id: request-1
+    DeviceCommandStatusChanged:
+      name: DeviceCommandStatusChanged
+      title: Статус команды устройства
+      contentType: application/json
+      payload:
+        type: object
+        required: [event_id, command_id, device_id, status]
+        properties:
+          event_id: { type: string }
+          command_id: { type: string }
+          device_id: { type: string }
+          status:
+            type: string
+            enum: [delivered, succeeded, failed, expired]
+            examples: [succeeded]
+          result:
+            type: object
+            additionalProperties: true
+            examples:
+              - applied: true
+          error: { type: [string, "null"] }
+      examples:
+        - name: commandSucceeded
+          payload:
+            event_id: evt-command-status-1
+            command_id: command-1
+            device_id: thermostat-1
+            status: succeeded
+            result:
+              applied: true
+            error: null

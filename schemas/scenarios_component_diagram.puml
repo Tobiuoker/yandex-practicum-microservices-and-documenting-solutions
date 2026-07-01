@@ -1,0 +1,46 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Context.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Container.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Component.puml
+
+title Диаграмма компонентов сервиса по управлению пользовательскими сценариями
+
+Person(user, "Пользователь")
+
+System_Boundary(s1, "Теплый дом") {
+    Container(api_gateway, "API Gateway", "Единая публичная точка входа")
+
+    System_Boundary(s2, "Управление пользовательскими сценариями") {
+        Component(rest_api, "Внутреннее Rest api", "Обрабатывает все входящие HTTP запросы")
+
+        Component(consumer, "Читатель топика доменных событий", "Слушает доменные события по метрикам датчиков для потенциального запуска специальных сценариев с условием по метрикам")
+        Component(scheduler, "Шедулер", "Триггерит запуск сценариев по расписанию")
+
+        Component(scenarios_handler, "Обработчик сценариев", "Создает, обновляет или удаляет сценарии по запросу пользователя")
+
+        Component(scenarios_engine, "Движок сценариев", "Валидирует и запускает сценарии")
+
+        Component(repository, "Репозиторий", "Абстрактный слой доступа к хранилищу")
+        ComponentDb(scenarios_db, "PostgreSQL", "Хранилище сценариев")
+    }
+
+    ComponentQueue_Ext(event_broker, "Apache Kafka", "Брокер сообщений доменных событий")
+
+    Component_Ext(device_registry, "Реестр датчиков", "Сервис, который хранит все информацию о датчиках")
+}
+
+Rel(user, api_gateway, "Входящий внешний запрос")
+
+Rel(api_gateway, rest_api, "Маршрутизирует запросы в сервис")
+
+Rel(rest_api, scenarios_handler, "Создает, удаляет или обновляет сценарий")
+Rel(scenarios_handler, repository, "Читает или фиксирует сценарий")
+Rel(repository, scenarios_db, "")
+
+Rel(event_broker, consumer, "Слушает доменные события с метриками датчиков")
+
+Rel(consumer, scenarios_engine, "Триггерит запуск сценария")
+Rel(scheduler, scenarios_engine, "Триггерит запуск сценария")
+
+Rel(scenarios_engine, device_registry, "Достает информацию по датчикам")
+Rel(scenarios_engine, event_broker, "Создает доменное событие, чтобы запустить команду")

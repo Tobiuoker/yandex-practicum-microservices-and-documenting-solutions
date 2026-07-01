@@ -32,6 +32,20 @@ func main() {
 	temperatureService := services.NewTemperatureService(temperatureAPIURL)
 	log.Printf("Temperature service initialized with API URL: %s\n", temperatureAPIURL)
 
+	deviceServiceURL := getEnv("DEVICE_SERVICE_URL", "http://device-service:8082")
+	telemetryServiceURL := getEnv("TELEMETRY_SERVICE_URL", "http://telemetry-service:8083")
+	enableSync := getEnv("ENABLE_MICROSERVICES_SYNC", "true") == "true"
+
+	deviceService := services.NewDeviceService(deviceServiceURL, enableSync)
+	telemetryService := services.NewTelemetryService(telemetryServiceURL, enableSync)
+
+	if enableSync {
+		log.Printf("Microservice sync enabled: device-service=%s, telemetry-service=%s",
+			deviceServiceURL, telemetryServiceURL)
+	} else {
+		log.Println("Microservice sync disabled (ENABLE_MICROSERVICES_SYNC=false)")
+	}
+
 	// Initialize router
 	router := gin.Default()
 
@@ -46,7 +60,7 @@ func main() {
 	apiRoutes := router.Group("/api/v1")
 
 	// Register sensor routes
-	sensorHandler := handlers.NewSensorHandler(database, temperatureService)
+	sensorHandler := handlers.NewSensorHandler(database, temperatureService, deviceService, telemetryService)
 	sensorHandler.RegisterRoutes(apiRoutes)
 
 	// Start server

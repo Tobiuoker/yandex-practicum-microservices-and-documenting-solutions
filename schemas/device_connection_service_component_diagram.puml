@@ -1,0 +1,41 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Context.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Container.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Component.puml
+
+title Диаграмма компонентов сервиса по управлению подключениями к датчикам
+
+System_Boundary(s1, "Теплый дом") {
+    System_Boundary(s2, "Сервис управления подключениями к датчикам") {
+        Component(mqtt_consumer, "Читатель mqtt сообщений", "Слушает топик и распределяет сообщения по обработчикам")
+        Component(domain_event_consumer, "Читатель доменных событий", "Слушает топик доменных событий (команд) и отправляет их в mqtt")
+        
+        Component(auth_ingestor, "Обработчик событий аутентификации устройства", "Нужен для настройки подключения датчика")
+        Component(telemetry_ingestor, "Обработчик событий метрик с датчиков", "Нужен для сбора метрик с датчиков")
+        Component(state_ingestor, "Обработчик событий смены состояния датчиков", "Уведомляет о смене статуса датчиков")
+        Component(command_ingestor, "Обработчик событий состояния команд датчиков", "Передает текущее состояние команды (устройство подтвердило или отклонило команду)")
+
+    }
+
+    ComponentQueue_Ext(domain_event_broker, "Apache Kafka", "Брокер сообщений доменных событий")
+    ComponentQueue_Ext(mqtt, "MQTT", "Прием и отправка сырых сообщений для датчиков")
+
+    Component_Ext(device_registry, "Реестр датчиков", "Сервис, который хранит все информацию о датчиках")
+}
+
+Rel(mqtt, mqtt_consumer, "Слушает сообщения")
+
+Rel(mqtt_consumer, auth_ingestor, "Передает сообщения, связанные с подключеним устройства")
+Rel(mqtt_consumer, telemetry_ingestor, "Передает сообщения, связанные с метриками по устройству")
+Rel(mqtt_consumer, state_ingestor, "Передает сообщения, связанные со сменой состояния усройства")
+Rel(mqtt_consumer, command_ingestor, "Передает сообщения, связанные с состоянием выполнения команд устройством")
+
+
+Rel(auth_ingestor, device_registry, "Делает синхронный запрос в device_registry для подтвреждения включения датчика")
+
+Rel(telemetry_ingestor, domain_event_broker, "Передает обработанные сообщения в виде доменных событий")
+Rel(state_ingestor, domain_event_broker, "Передает обработанные сообщения в виде доменных событий")
+Rel(command_ingestor, domain_event_broker, "Передает обработанные сообщения в виде доменных событий")
+
+Rel(domain_event_broker, domain_event_consumer, "Слушает доменные события")
+Rel(domain_event_consumer, mqtt, "Отправляет команды датчикам через mqtt")

@@ -1,0 +1,21 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Context.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Container.puml
+
+title Контекст Монолитной Системы
+
+Person(user, "Пользователь")
+System_Ext(sensors, "Датчики", "Устройства, которые при включении сами регистриуются в систему")
+
+System_Boundary(s1, "Теплый дом") {
+  System(temperature_managing, "Управление отоплением", "Приложение для управления и просмотра температуры в доме")
+  ContainerDb(sensors_db, "Датчики")
+}
+
+System_Ext(temperature_api, "Система отопления")
+
+Rel(temperature_managing, sensors_db, "Хранит состояние датчиков температуры")
+Rel(user, temperature_managing, "Просматривает и выставляет температуру")
+Rel(sensors, temperature_managing, "Регистрируются и передают температуру")
+Rel(temperature_managing, temperature_api, "Запрашивает актуальную температуру или меняет ее")
+@enduml

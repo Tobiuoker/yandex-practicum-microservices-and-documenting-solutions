@@ -1,0 +1,88 @@
+@startuml
+
+title Одна из критичных частей Device Registry - создание и валидация команд
+
+class CommandController {
+  +createCommand(deviceId, request, idempotencyKey): CommandResponse
+  +validateCommand(deviceId, request): ValidationResult
+}
+
+class CommandFactory {
+  -idempotency: IdempotencyChecker
+  -repository: IRepository
+  -validator: ICapabilityValidator
+  -outbox: OutboxWriter
+  +create(deviceId, request, idempotencyKey): DeviceCommand
+}
+
+class IdempotencyChecker {
+  -repository: IRepository
+  +findExisting(deviceId, idempotencyKey): DeviceCommand
+}
+
+interface ICapabilityValidator {
+  +validate(device: Device, capability: String, command: String, payload: Json): ValidationResult
+}
+
+class SchemaCapabilityValidator {
+  -repository: IRepository
+  +validate(device: Device, capability: String, command: String, payload: Json): ValidationResult
+}
+
+interface IRepository {
+  +findDeviceById(deviceId): Device
+  +save(command: DeviceCommand): void
+  +findCommandByIdempotencyKey(deviceId, key): DeviceCommand
+}
+
+class DeviceRepository {
+  +findDeviceById(deviceId): Device
+  +save(command: DeviceCommand): void
+  +findCommandByIdempotencyKey(deviceId, key): DeviceCommand
+}
+
+class OutboxWriter {
+  +enqueue(event: CommandRequested): void
+}
+
+class ValidationResult {
+  +valid: boolean
+  +normalizedPayload: Json
+  +errors: List<String>
+}
+
+class DeviceCommand {
+  +id: UUID
+  +deviceId: UUID
+  +capability: String
+  +commandType: String
+  +payload: Json
+  +idempotencyKey: String
+  +status: CommandStatus
+}
+
+class CommandRequested {
+  +eventId: UUID
+  +commandId: UUID
+  +deviceId: UUID
+  +capability: String
+  +command: String
+  +payload: Json
+  +idempotencyKey: String
+}
+
+CommandController --> CommandFactory
+CommandController --> ICapabilityValidator : validateCommand
+CommandFactory --> IdempotencyChecker : 1. pre-check
+CommandFactory --> IRepository : 2. load device
+CommandFactory --> ICapabilityValidator : 3. validate
+CommandFactory --> IRepository : 4a. save (UNIQUE)
+CommandFactory --> OutboxWriter : 4b. enqueue
+ICapabilityValidator <.. SchemaCapabilityValidator
+SchemaCapabilityValidator --> ValidationResult
+IdempotencyChecker --> IRepository
+SchemaCapabilityValidator --> IRepository
+IRepository <.. DeviceRepository
+DeviceRepository --> DeviceCommand
+OutboxWriter --> CommandRequested
+@enduml
