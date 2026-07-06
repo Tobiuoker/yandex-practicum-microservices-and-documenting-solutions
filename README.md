@@ -14,47 +14,49 @@
 
 **Управление отоплением:**
 
-- Пользователи могут…
-- Система поддерживает…
-- …
+- Пользователи могут создавать, обновлять и удалять сенсоры. Также возможно изменение значения самого датчика, то есть реализовано управление температурой
+- Система поддерживает локальное фиксирование в БД данных по датчикам
 
 **Мониторинг температуры:**
 
-- Пользователи могут…
-- Система поддерживает…
-- …
+- Пользователи могут получить информацию как по конкретному датчику, так и по всем сразу
+- Система поддерживает автоматическое синхронное обновление данных датчика температуры из удалённого АПИ при запросе информации о нём
 
 ### 2. Анализ архитектуры монолитного приложения
 
-Перечислите здесь основные особенности текущего приложения: какой язык программирования используется, какая база данных, как организовано взаимодействие между компонентами и так далее.
+Язык программирования: Go
+База данных: PostgreSQL
+Архитектура: Монолитная, но есть участки кода поделены на слои (насколько это возможно)
+- В слое handle находится транспортный слой, то есть ручки, которые доступны для вызовы извне
+- Папка service содержит слой для взаимодействия с внешним АПИ - в нашем случае АПИ температуры
+- DB можно назвать слоем доступа к данным, т.к. реализует работу с БД Postgres
+- И папка models хранит как доменную модель, так и модели для запросов во внешнюю систему
+Взаимодействие: все ручки сервиса вызываются конкурентно (благодаря горутинам в Go), но вот запросы во внешнее апи (например в ручке по получению инфы по датчикам) делаются синхронно по очереди для каждого датчика
+Масштабируемость: Ограничена, так как монолит сложно масштабировать по частям из-за сильной связности его контекстов (мониторинг и управление датчиками)
+Развертывание: Требует остановки всего приложения.
 
 ### 3. Определение доменов и границы контекстов
 
-Опишите здесь домены, которые вы выделили.
+Device Registry - реестр датчиков, их статус, тип, расположение и тд
+Telemetry - история измерений по показаниям
+Device Connectivity - подключение датчиков, MQTT-взаимодействие, доставка команд
+Scenarios - пользовательские сценарии, запускаемые по расписанию, состояниям или показаниям telemetry
+API Gateway - единая публичная точка входа и проверка доступа
 
 ### **4. Проблемы монолитного решения**
 
-- …
-- …
-- …
+- Монолит знает про все: про внешнее АПИ, про хранение и получение температуры
+- Пока что поддержан только датчик с температурой, а дальнейшее их расширение потребует больших правок в коде
+- В ручках получения инфы о датчиках монолит их обходит и делает блокирующий запрос в сторонний сервис
+- Нельзя посмотреть историю изменения какого-либо датчика (будет сложно построить красивые дэшборды с детализацией)
 
-Если вы считаете, что текущее решение не вызывает проблем, аргументируйте свою позицию.
 
-### 5. Визуализация контекста системы — диаграмма С4
+### 5. Визуализация контекста системы - диаграмма С4
 
 Добавьте сюда диаграмму контекста в модели C4.
 
-Чтобы добавить ссылку в файл Readme.md, нужно использовать синтаксис Markdown. Это делают так:
+[Диаграмма монолитного контекста](schemas/monolith_context_diagram.puml)
 
-```markdown
-[Текст ссылки](URL)
-```
-
-Замените `Текст ссылки` текстом, который хотите использовать для ссылки. Вместо `URL` вставьте адрес, на который должна вести ссылка. Например:
-
-```markdown
-[Посетите Яндекс](https://ya.ru/)
-```
 
 # Задание 2. Проектирование микросервисной архитектуры
 
@@ -62,93 +64,187 @@
 
 **Диаграмма контейнеров (Containers)**
 
-Добавьте диаграмму.
+[Контейнерная диаграмма](schemas/container_diagram.puml)
 
 **Диаграмма компонентов (Components)**
 
-Добавьте диаграмму для каждого из выделенных микросервисов.
+[Device Registry Service](schemas/device_registry_component_diagram.puml);
+[Device Connection Service](schemas/device_connection_service_component_diagram.puml);
+[Telemetry Service](schemas/telemetry_service_component_diagram.puml);
+[Scenarios Service](schemas/scenarios_component_diagram.puml).
 
 **Диаграмма кода (Code)**
 
-Добавьте одну диаграмму или несколько.
+Критичный сценарий создания и валидации команды устройству описан в [тут](schemas/device_registry_command_creation_and_validation_code_diagram.puml).
 
 # Задание 3. Разработка ER-диаграммы
 
-Добавьте сюда ER-диаграмму. Она должна отражать ключевые сущности системы, их атрибуты и тип связей между ними.
+[ER-диаграмма](schemas/er_diagram.puml)
+
+ER-модель отражает ключевые сущности будущей системы:
+
+- User
+- House
+- Device
+- DeviceCommand
+- TelemetryData
+- Scenario
+- ScenarioTrigger
+- ScenarioAction
+
+Основные связи:
+
+- пользователь владеет домами
+- дом содержит устройства
+- устройство генерирует telemetry
+- устройство получает команды
+- сценарий принадлежит дому
+- сценарий имеет triggers и actions
+- action может быть направлен на конкретное устройство
 
 # Задание 4. Создание и документирование API
 
-### 1. Тип API
+В решении используются два типа API
 
-Укажите, какой тип API вы будете использовать для взаимодействия микросервисов. Объясните своё решение.
+### REST API
 
-### 2. Документация API
+REST API используется для синхронных взаимодействий, когда вызывающему сервису нужен немедленный ответ.
 
-Здесь приложите ссылки на документацию API для микросервисов, которые вы спроектировали в первой части проектной работы. Для документирования используйте Swagger/OpenAPI или AsyncAPI.
+Минимальный набор endpoint'ов:
+
+`GET /internal/v1/devices/{deviceId}` - получить информацию об устройстве
+`PATCH /internal/v1/devices/{deviceId}/connection-status` - обновить online/offline статус устройства
+`POST /internal/v1/devices/{deviceId}/commands` - создать команду устройству
+`GET /internal/v1/telemetry` - получить исторические метрики
+`POST /internal/v1/scenarios` - Создать пользовательский сценарий
+
+OpenAPI документация находится [`тут`](schemas/rest_api.yaml).
+
+### AsyncAPI
+
+AsyncAPI используется для асинхронного взаимодействия через Kafka, когда producer не ждёт немедленного ответа:
+
+| Topic | Producer | Consumers | Назначение |
+|---|---|---|---|
+| `device.telemetry` | Device Connection Service | Telemetry Service, Scenarios Service | Новое измерение датчика |
+| `device.state` | Device Connection Service | Device Registry Service, Scenarios Service | Изменение состояния устройства |
+| `device.commands` | Device Registry Service | Device Connection Service | Команда на доставку устройству |
+| `device.command_status` | Device Connection Service | Device Registry Service | Статус доставки или выполнения команды |
+
+AsyncAPI документация находится [`тут`](schemas/async_api.yaml).
+
+
+---
 
 # Задание 5. Работа с docker и docker-compose
 
-Перейдите в apps.
+Все сервисы запускаются через [`apps/docker-compose.yml`](apps/docker-compose.yml).
 
-Там находится приложение-монолит для работы с датчиками температуры. В README.md описано как запустить решение.
+Состав окружения:
 
-Вам нужно:
+| Сервис | Порт | Назначение |
+|---|---:|---|
+| `app` | 8080 | Go-монолит smart_home |
+| `temperature-api` | 8081 | Внешний API температуры |
+| `device-service` | 8082 | Новый микросервис реестра устройств |
+| `telemetry-service` | 8083 | Новый микросервис телеметрии |
+| `postgres` | internal | PostgreSQL монолита |
+| `device-postgres` | internal | PostgreSQL device-service |
+| `telemetry-postgres` | internal | PostgreSQL telemetry-service |
 
-1) сделать простое приложение temperature-api на любом удобном для вас языке программирования, которое при запросе /temperature?location= будет отдавать рандомное значение температуры.
+Запуск из директории [`apps`](apps):
 
-Locations - название комнаты, sensorId - идентификатор названия комнаты
-
-```
-	// If no location is provided, use a default based on sensor ID
-	if location == "" {
-		switch sensorID {
-		case "1":
-			location = "Living Room"
-		case "2":
-			location = "Bedroom"
-		case "3":
-			location = "Kitchen"
-		default:
-			location = "Unknown"
-		}
-	}
-
-	// If no sensor ID is provided, generate one based on location
-	if sensorID == "" {
-		switch location {
-		case "Living Room":
-			sensorID = "1"
-		case "Bedroom":
-			sensorID = "2"
-		case "Kitchen":
-			sensorID = "3"
-		default:
-			sensorID = "0"
-		}
-	}
+```bash
+docker compose up --build
 ```
 
-2) Приложение следует упаковать в Docker и добавить в docker-compose. Порт по умолчанию должен быть 8081
+Проверка healthcheck монолита:
 
-3) Кроме того для smart_home приложения требуется база данных - добавьте в docker-compose файл настройки для запуска postgres с указанием скрипта инициализации ./smart_home/init.sql
-
-Для проверки можно использовать Postman коллекцию smarthome-api.postman_collection.json и вызвать:
-
-- Create Sensor
-- Get All Sensors
-
-Должно при каждом вызове отображаться разное значение температуры
-
-Ревьюер будет проверять точно так же.
+```bash
+curl http://localhost:8080/health
+```
 
 
 # **Задание 6. Разработка MVP**
 
-Необходимо создать новые микросервисы и обеспечить их интеграции с существующим монолитом для плавного перехода к микросервисной архитектуре. 
+Было добавлено два микросервиса
 
-### **Что нужно сделать**
+1. [Device Service](apps/device-service) - хранит синхронизированные устройства, соответствующие legacy sensors монолита.
+2. [Telemetry Service](apps/telemetry-service) - хранит историю telemetry, которую монолит отправляет при чтении или обновлении температуры.
 
-1. Создайте новые микросервисы для управления телеметрией и устройствами (с простейшей логикой), которые будут интегрированы с существующим монолитным приложением. Каждый микросервис на своем ООП языке.
-2. Обеспечьте взаимодействие между микросервисами и монолитом (при желании с помощью брокера сообщений), чтобы постепенно перенести функциональность из монолита в микросервисы. 
+## Device Service
 
-В результате у вас должны быть созданы Dockerfiles и docker-compose для запуска микросервисов. 
+Основные ручки:
+
+| Endpoint | Назначение |
+|---|---|
+| `POST /devices` | Создать или обновить устройство по `legacy_sensor_id` |
+| `GET /devices` | Получить список устройств |
+| `GET /devices/by-legacy-sensor/{sensorId}` | Получить устройство по id legacy sensor |
+| `PUT /devices/by-legacy-sensor/{sensorId}` | Обновить устройство |
+| `DELETE /devices/by-legacy-sensor/{sensorId}` | Пометить устройство удалённым |
+
+Device Service использует отдельную БД `devices`
+
+## Telemetry Service
+
+Основные ручки:
+
+| Endpoint | Назначение |
+|---|---|
+| `POST /telemetry` | Сохранить новое измерение |
+| `GET /telemetry` | Получить историю telemetry |
+| `GET /telemetry/latest` | Получить последнее измерение sensor |
+
+Для Telemetry Service также была добавлена отдельная БД `telemetry`
+
+## Интеграция монолита с микросервисами
+
+Монолит получает адреса микросервисов через переменные окружения. Если `ENABLE_MICROSERVICES_SYNC` выставлен в false, то новые сервисы вызываться не будут
+
+- `DEVICE_SERVICE_URL=http://device-service:8082`;
+- `TELEMETRY_SERVICE_URL=http://telemetry-service:8083`;
+- `ENABLE_MICROSERVICES_SYNC=true`.
+
+Клиенты микросервисов:
+
+- [`Для device service`](apps/smart_home/services/device_client.go);
+- [`Для telemetry service`](apps/smart_home/services/telemetry_client.go).
+
+### Интеграции с монолитом
+
+Монолит пишет данные в новые сервисы. Сделал вызов новых микросервисов в отдельных горутинах, чтобы не портить тайминги монолита
+
+| Действие в монолите | Интеграция |
+|---|---|
+| `Create Sensor` | вызывает `device-service POST /devices` |
+| `Update Sensor` | вызывает `device-service PUT /devices/by-legacy-sensor/{id}` |
+| `Delete Sensor` | вызывает `device-service DELETE /devices/by-legacy-sensor/{id}` |
+| `Get All Sensors` | получает температуру и пишет telemetry |
+| `Get Sensor by ID` | получает температуру и пишет telemetry |
+| `Update Sensor Value` | пишет telemetry |
+
+
+
+Монолит также умеет читать данные из новых сервисов.
+
+Добавлены демонстрационные ручки монолита:
+
+| Endpoint монолита | Что делает |
+|---|---|
+| `GET /api/v1/sensors/{id}/device` | Читает device из device-service |
+| `GET /api/v1/sensors/{id}/telemetry` | Читает историю telemetry из telemetry-service |
+| `GET /api/v1/sensors/{id}/telemetry/latest` | Читает последнее telemetry-измерение |
+| `GET /api/v1/sensors/{id}/microservices-summary` | Возвращает sensor из монолита + device + latest telemetry |
+
+
+[Обновленная коллекция postman](apps/smarthome-api.postman_collection.json).
+
+Можно проверить так:
+1. `Create Sensor`
+2. `Get Sensor by ID` - создаёт telemetry через temperature-api
+3. `Update Sensor Value` - дополнительно пишет telemetry
+4. `Get Sensor Device` - монолит читает device-service
+5. `Get Sensor Telemetry History` - монолит читает telemetry-service
+6. `Get Sensor Latest Telemetry` - монолит читает latest telemetry
+7. `Get Sensor Microservices Summary` - монолит показывает данные из всех источников одним ответом

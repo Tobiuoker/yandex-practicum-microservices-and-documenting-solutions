@@ -1,0 +1,53 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Context.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Container.puml
+
+title Контейнер обновленной системы
+
+Person(user, "Пользователь")
+System_Ext(mqtt_broker, "MQTT Брокер", "Управляет потоком сообщений от устройств к системе и наоборот")
+
+System_Boundary(c1, "Теплый дом") {
+    Container(web_app, "Веб приложение", "React", "Веб приложение для управления умным домом")
+    Container(mobile_app, "Мобильное приложение", "iOS, Android", "Мобильное приложение для управления умным домом")
+
+    Container(api_gateway, "API Gateway", "Единая публичная точка входа")
+
+    Container(device_registry, "Реестр устройств", "Go", "Сервис для управлением реестром устройств. Хранит всю информацию об устройствах")
+    Container(telemetry_service, "Управление телеметрией", "Go", "Сервис для хранения и выдачи показаний датчиков для историчности")
+    Container(scenarios_service, "Управление сценариями", "Go", "Сервис для создания и запуска пользовательских сценариев")
+    Container(device_connection_service, "Управление подключениями к датчикам", "Go", "Сервис, который инкапсулирует общение с датчиками по внешнему MTQQ брокеру")
+
+    ContainerQueue(internal_broker, "Apache Kafka", "Брокер сообщений внутренних событий для межсервисного взаимодействия")
+    ContainerDb(device_registry_db, "PostgreSQL", "Хранилище подключенных датчиков")
+    ContainerDb(telemetry_db, "Clickhouse", "Хранилище показателей датчиков")
+    ContainerDb(scenarios_db, "PostgreSQL", "Хранилище пользовательских сценариев")
+}
+
+Rel(user, web_app, "")
+Rel(user, mobile_app, "")
+
+Rel(web_app, api_gateway, "HTTP")
+Rel(mobile_app, api_gateway, "HTTP")
+
+Rel(api_gateway, device_registry, "HTTP")
+Rel(api_gateway, telemetry_service, "HTTP")
+Rel(api_gateway, scenarios_service, "HTTP")
+
+Rel(mqtt_broker, device_connection_service, "Слушает события от датчиков")
+Rel(device_connection_service, mqtt_broker, "Отправляет инструкции датчикам")
+
+Rel(device_registry, device_registry_db, "Фиксирует данные о подключенном датчике")
+Rel(telemetry_service, telemetry_db, "Сохраняет исторические данные датчика")
+Rel(scenarios_service, scenarios_db, "Сохраняет пользовательские сценарии")
+
+Rel(device_connection_service, internal_broker, "Публикует ивенты о состоянии датчиков")
+Rel(device_connection_service, device_registry, "HTTP запрос для установления подключения датчика")
+
+Rel(device_registry, internal_broker, "Публикует вызванную команду для датчика")
+
+Rel(internal_broker, device_connection_service, "Слушает команды для датчиков")
+Rel(internal_broker, telemetry_service, "Слушает метрики датчиков (для сохранения)")
+Rel(internal_broker, scenarios_service, "Слушает состояние и метрики датчиков (для запуска сценариев)")
+Rel(internal_broker, device_registry, "Слушает изменение состояния датчиков и статус выполнения команд")
+@enduml

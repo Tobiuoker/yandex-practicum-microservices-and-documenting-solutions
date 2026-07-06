@@ -1,0 +1,39 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Context.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Container.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Component.puml
+
+title Диаграмма компонентов сервиса по управлению телеметрией
+
+Person(user, "Пользователь")
+
+System_Boundary(s1, "Теплый дом") {
+    Container(api_gateway, "API Gateway", "Единая публичная точка входа")
+
+    System_Boundary(s2, "Управление телеметрией") {
+        Component(consumer, "Слушатель доменных событий", "Читает доменные события из брокера")
+
+        Component(metric_normalizer, "Нормализатор метрик", "Отвечает за приведение метрик к единому виду")
+        Component(rest_api, "Внутреннее Rest api", "Отвечает на внешние вызовы пользователя для получения метрик")
+        
+        Component(metrics_retriever, "Извлекатель метрик", "Выдает запрашиваемые метрики пользователем")
+
+        Component(repository, "Репозиторий", "Абстрактный слой доступа к хранилищу")
+        ComponentDb(telemetry_db, "Clickhouse", "Хранилище метрик")
+    }
+
+    ComponentQueue_Ext(event_broker, "Apache Kafka", "Брокер сообщений доменных событий")
+}
+
+Rel(user, api_gateway, "Входящий внешний запрос")
+Rel(api_gateway, rest_api, "Маршрутизирует запросы в сервис")
+
+Rel(rest_api, metrics_retriever, "Выдает метрики")
+Rel(metrics_retriever, repository, "Читает метрики из базы")
+
+Rel(event_broker, consumer, "Случшает доменные события, а конкретно сообщения с переданными метриками")
+
+Rel(consumer, metric_normalizer, "Сырые метрики приводит к общему виду")
+Rel(metric_normalizer, repository, "Обработанные метрики пишет в базу")
+
+Rel(repository, telemetry_db, "Запись в Clickhouse")

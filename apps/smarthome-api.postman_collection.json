@@ -189,6 +189,109 @@
                 "description": "Update a sensor's value and status"
             },
             "response": []
+        },
+        {
+            "name": "Get Sensor Device",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8080/api/v1/sensors/1/device",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8080",
+                    "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "1",
+                        "device"
+                    ]
+                },
+                "description": "Retrieve the synchronized device for sensor"
+            },
+            "response": []
+        },
+        {
+            "name": "Get Sensor Telemetry History",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8080/api/v1/sensors/1/telemetry?metric=temperature",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8080",
+                    "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "1",
+                        "telemetry"
+                    ],
+                    "query": [
+                        {
+                            "key": "metric",
+                            "value": "temperature"
+                        }
+                    ]
+                },
+                "description": "Retrieve telemetry history for sensor"
+            },
+            "response": []
+        },
+        {
+            "name": "Get Sensor Latest Telemetry",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8080/api/v1/sensors/1/telemetry/latest",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8080",
+                    "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "1",
+                        "telemetry",
+                        "latest"
+                    ]
+                },
+                "description": "Retrieve the latest telemetry measurement for sensor"
+            },
+            "response": []
+        },
+        {
+            "name": "Get Sensor Microservices Summary",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:8080/api/v1/sensors/1/microservices-summary",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "8080",
+                    "path": [
+                        "api",
+                        "v1",
+                        "sensors",
+                        "1",
+                        "microservices-summary"
+                    ]
+                },
+                "description": "Retrieve local monolith sensor data"
+            },
+            "response": []
         }
     ],
     "event": [

@@ -1,0 +1,352 @@
+openapi: 3.2.0
+info:
+  title: Teply Dom Internal REST API
+  description: Внутренний REST API для общения сервисов между собой
+
+servers:
+  - url: http://api-gateway:8080
+    description: API Gateway routes internal calls to services
+
+paths:
+  /internal/v1/devices/{deviceId}:
+    get:
+      summary: Получить информацию об устройстве
+      description: Используется API Gateway, Telemetry Service и Scenarios Service, когда им нужны данные устройства из Device Registry
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Устройство найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              examples:
+                thermostat:
+                  value:
+                    id: thermostat-1
+                    house_id: house-1
+                    name: Living Room Thermostat
+                    type: thermostat
+                    location: Living Room
+                    status: online
+                    capabilities: [thermostat, temperature_sensor]
+                    current_state:
+                      power: on
+                      target_temperature: 22
+                      temperature: 21.5
+        '404':
+          description: Устройство не найдено
+        '500':
+          description: Внутренняя ошибка
+
+  /internal/v1/devices/{deviceId}/connection-status:
+    patch:
+      summary: Обновить online/offline статус устройства
+      description: Device Connection Service вызывает этот endpoint после MQTT события на подключение датчика
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, last_seen_at]
+              properties:
+                status:
+                  type: string
+                  enum: [online, offline]
+                last_seen_at:
+                  type: string
+                  format: date-time
+            examples:
+              online:
+                value:
+                  status: online
+                  last_seen_at: '2026-01-01T00:00:00Z'
+      responses:
+        '200':
+          description: Статус обновлен
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  device_id: { type: string }
+                  updated: { type: boolean }
+                  status:
+                    type: string
+                    enum: [online, offline]
+              examples:
+                updated:
+                  value:
+                    device_id: temp-sensor-1
+                    status: online
+                    updated: true
+        '404':
+          description: Устройство не найдено
+        '409':
+          description: Недопустимое изменение статуса
+        '500':
+          description: Внутренняя ошибка
+
+  /internal/v1/devices/{deviceId}/command:
+    post:
+      summary: Создать команду устройству
+      description: Device Registry Service валидирует команду, сохраняет DeviceCommand и публикует CommandRequested в топик device.commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceCommandRequest'
+            examples:
+              setTargetTemperature:
+                value:
+                  requested_by: user-1
+                  capability: thermostat
+                  command: set_target_temperature
+                  payload:
+                    target_temperature: 22
+      responses:
+        '202':
+          description: Команда создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCommandResponse'
+              examples:
+                accepted:
+                  value:
+                    command_id: command-1
+                    device_id: thermostat-1
+                    status: pending
+        '400':
+          description: Неверный формат команды
+        '404':
+          description: Устройство не найдено
+        '409':
+          description: Дубликат Idempotency-Key или устройство не принимает команды
+        '422':
+          description: Capability или команда не поддерживается устройством
+        '500':
+          description: Внутренняя ошибка
+
+  /internal/v1/telemetry:
+    get:
+      summary: Получить исторические метрики устройства
+      description: API Gateway или Scenarios Service запрашивает метрики из Telemetry Service.
+      parameters:
+        - name: house_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: device_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: metric
+          in: query
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Метрики найдены
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [points]
+                properties:
+                  points:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TelemetryPoint'
+              examples:
+                temperatureHistory:
+                  value:
+                    points:
+                      - device_id: temp-sensor-1
+                        metric: temperature
+                        value: 21.5
+                        unit: celsius
+                        observed_at: '2026-01-01T00:00:00Z'
+                        quality: ok
+        '400':
+          description: Некорректный временной диапазон или metric
+        '404':
+          description: Метрики не найдены
+        '500':
+          description: Внутренняя ошибка
+
+  /internal/v1/scenarios:
+    post:
+      summary: Создать пользовательский сценарий
+      description: Scenarios Service сохраняет сценарий, который позже будет запускаться по событиям telemetry/state или по расписанию.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScenarioRequest'
+            examples:
+              heatWhenCold:
+                value:
+                  house_id: house-1
+                  name: Heat when cold
+                  enabled: true
+                  triggers:
+                    - type: telemetry_threshold
+                      source_device_id: temp-sensor-1
+                      metric: temperature
+                      operator: less_than
+                      value: 18
+                    - type: schedule
+                      cron: '0 6 * * *'
+                      timezone: Europe/Moscow
+                  actions:
+                    - type: device_command
+                      target_device_id: thermostat-1
+                      capability: thermostat
+                      command: turn_on
+                      payload: {}
+      responses:
+        '201':
+          description: Сценарий создан
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scenario_id, status]
+                properties:
+                  scenario_id: { type: string }
+                  status: { type: string }
+              examples:
+                created:
+                  value:
+                    scenario_id: scenario-1
+                    status: active
+        '400':
+          description: Неверное описание сценария
+        '404':
+          description: Дом или устройство в сценарии не найдено
+        '422':
+          description: Действие сценария невозможно выполнить указанным устройством
+        '500':
+          description: Внутренняя ошибка
+
+components:
+  schemas:
+    Device:
+      type: object
+      required: [id, house_id, name, type, status]
+      properties:
+        id: { type: string }
+        house_id: { type: string }
+        name: { type: string }
+        type: { type: string }
+        location: { type: string }
+        serial_number: { type: string }
+        status:
+          type: string
+          enum: [online, offline, inactive]
+        capabilities:
+          type: array
+          items: { type: string }
+        current_state:
+          type: object
+          additionalProperties: true
+
+    CreateDeviceCommandRequest:
+      type: object
+      required: [requested_by, capability, command, payload]
+      properties:
+        requested_by: { type: string }
+        capability: { type: string }
+        command: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+
+    DeviceCommandResponse:
+      type: object
+      required: [command_id, device_id, status]
+      properties:
+        command_id: { type: string }
+        device_id: { type: string }
+        status:
+          type: string
+          enum: [pending, delivered, succeeded, failed, expired]
+
+    TelemetryPoint:
+      type: object
+      required: [device_id, metric, value, observed_at]
+      properties:
+        device_id: { type: string }
+        metric: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        observed_at: { type: string, format: date-time }
+        quality: { type: string }
+
+    CreateScenarioRequest:
+      type: object
+      required: [house_id, name, enabled, triggers, actions]
+      properties:
+        house_id: { type: string }
+        name: { type: string }
+        enabled: { type: boolean }
+        triggers:
+          type: array
+          items:
+            type: object
+            required: [type]
+            properties:
+              type: { type: string, enum: [telemetry_threshold, state_changed, schedule] }
+              source_device_id:
+                type: string
+                nullable: true
+                description: Заполняется только для trigger, который зависит от показаний конкретного датчика 
+              metric: { type: string }
+              operator: { type: string, enum: [less_than, greater_than, equals] }
+              value: { type: number }
+              cron: { type: string }
+              timezone: { type: string }
+        actions:
+          type: array
+          items:
+            type: object
+            required: [type]
+            properties:
+              type: { type: string, enum: [device_command] }
+              target_device_id: { type: string }
+              capability: { type: string }
+              command: { type: string }
+              payload:
+                type: object
+                additionalProperties: true

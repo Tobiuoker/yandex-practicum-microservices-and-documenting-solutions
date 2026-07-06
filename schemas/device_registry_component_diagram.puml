@@ -1,0 +1,49 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Context.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Container.puml
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Component.puml
+
+title Диаграмма компонентов сервиса по управлению датчиками
+
+Person(user, "Пользователь")
+
+System_Boundary(s1, "Теплый дом") {
+    Container(api_gateway, "API Gateway", "Единая публичная точка входа")
+
+    System_Boundary(s2, "Реестр устройств") {
+        Component(rest_api, "Внутреннее Rest api", "Обрабатывает все входящие HTTP запросы")
+
+        Component(device_catalog, "Каталог девайсов", "Отвечает за каталог датчиков (их создание и выдачу)")
+        Component(command_factory, "Фабрика команд", "Создает, а также валидирует переданные команды устройству")
+        Component(connection_manager, "Менеджер подключений", "Управляет входящими запросами на подключение устройства")
+        Component(topic_publisher, "Создание доменных событий", "Пишет в топик событие, уведомляя всю систему о просиходящем")
+
+        Component(consumer, "Читатель доменных событий", "Слушает ивенты по изменению состояния датчика и его команд")
+
+        Component(repository, "Репозиторий", "Абстрактный слой доступа к хранилищу")
+        ComponentDb(device_registry_db, "PostgreSQL", "Хранилище подключенных датчиков")
+    }
+
+    ComponentQueue_Ext(event_broker, "Apache Kafka", "Брокер сообщений доменных событий")
+}
+
+Rel(user, api_gateway, "Входящий внешний запрос")
+
+Rel(api_gateway, rest_api, "Маршрутизирует запросы в сервис")
+
+Rel(rest_api, device_catalog, "Исполняет логику по получению или регистрации датчика")
+Rel(rest_api, command_factory, "Выполняет логику по исполнению команды каким-то датчиком (включая валидацию команды)")
+Rel(rest_api, connection_manager, "Выполняет логику по подключению датчика")
+
+Rel(command_factory, topic_publisher, "Отправка доменного события, чтобы интересющиеся сервисы приняли сообщение о том, что нужно исполнить опредленную команду конкретным девайсом")
+
+Rel(device_catalog, repository, "Чтение и запись датчиков")
+Rel(command_factory, repository, "Чтение и запись запущенных команд")
+Rel(connection_manager, repository, "Фиксирует состояние подключения датчика")
+
+Rel(topic_publisher, event_broker, "Запись сообщения в топик")
+
+Rel(event_broker, consumer, "Слушает доменные события")
+Rel(consumer, repository, "Фиксирует изменения статуса датчика и его команд")
+
+Rel(repository, device_registry_db, "Фиксирование данных в базу")
